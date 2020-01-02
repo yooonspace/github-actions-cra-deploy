@@ -1,44 +1,79 @@
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+# CRA(Create React App) deploy on S3 & CloudFront with Github Actions
 
-## Available Scripts
+> Create React App으로 생성한 프로젝트를 AWS S3와 CloudFront에 배포를 자동화 시켜주는 Github Action 템플릿 파일입니다. 
 
-In the project directory, you can run:
+## 사전준비
+> 최초 배포는 수동 배포를 필요로 합니다. Velopert님의 [리액트 앱 AWS S3, CloudFront 에 배포하기](https://react-etc.vlpt.us/08.deploy-s3.html) 글을 참고해주세요.
 
-### `yarn start`
+## 사용방법
 
-Runs the app in the development mode.<br />
-Open [http://localhost:3000](http://localhost:3000) to view it in the browser.
+### 1. 준비
+#### 1.1. `AWS Console > IAM`에 접속해서 `프로그래밍 방식 액세스 사용자를 추가합니다.
+![IAM1](./src/README/IAM1.png)
 
-The page will reload if you make edits.<br />
-You will also see any lint errors in the console.
+#### 1.2. `AmazonS3FullAccess`와 `CloudFrontFullAccess`권한을 추가해줍니다.
+![IAM2](./src/README/IAM2.png)
 
-### `yarn test`
 
-Launches the test runner in the interactive watch mode.<br />
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+#### 1.3. 사용할 프로젝트의 `Github Repository > Setting > Secrets` 에서 `Add a new secret`을 클릭합니다.
+![1](./src/README/1.png)
 
-### `yarn build`
+#### 1.4. IAM에서 발급받은 액세스 키 ID와 비밀 액세스 키를 각각 `AWS_ACCESS_KEY_ID`와 `AWS_SECRET_ACCESS_KEY`로 저장해주세요.
+![IAM3](./src/README/IAM3.png)
+![IAM4](./src/README/IAM4.png)
 
-Builds the app for production to the `build` folder.<br />
-It correctly bundles React in production mode and optimizes the build for the best performance.
+### 2. Github Actions 설정
+#### 2.1. `.github/workflows/template.yml` 파일을 수정해서 사용해주세요.
+> S3 Bucket Name과 CloudFront Distribution ID가 필요합니다.
 
-The build is minified and the filenames include the hashes.<br />
-Your app is ready to be deployed!
+```yaml
+name: CRA(Create React App) Build & deploy on AWS S3 + CloudFront invalidate
+on:
+  push:
+    branches:
+      - master
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+jobs:
+  build:
+    runs-on: ubuntu-18.04
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@master
 
-### `yarn eject`
+      - name: Install Dependencies
+        uses: borales/actions-yarn@v2.0.0
+        with:
+          cmd: install
 
-**Note: this is a one-way operation. Once you `eject`, you can’t go back!**
+      - name: Build
+        uses: borales/actions-yarn@v2.0.0
+        with:
+          cmd: build
 
-If you aren’t satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-northeast-2
 
-Instead, it will copy all the configuration files and the transitive dependencies (Webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you’re on your own.
+      - name: Deploy to S3
+        run: |
+          aws s3 cp \
+            --recursive \
+            --region ap-northeast-2 \
+            build s3://your-s3-bucket-name                  # S3 Bucket Name
 
-You don’t have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn’t feel obligated to use this feature. However we understand that this tool wouldn’t be useful if you couldn’t customize it when you are ready for it.
+      - name: CloudFront Invalidate
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id your-distribution-id \        # CloudFront Distribution ID
+            --paths / /index.html /service-worker.js /manifest.json /favicon.ico /robots.txt /logo192.png /logo512.png /asset-mainfest.json
 
-## Learn More
+```
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+## License
+MIT License
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+Copyright 2019 Lee Seungmin. All rights reserved.
+
